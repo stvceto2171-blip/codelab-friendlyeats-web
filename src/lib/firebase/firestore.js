@@ -1,138 +1,52 @@
-import { generateFakeRestaurantsAndReviews } from "@/src/lib/fakeRestaurants.js";
-
-import {
-  collection,
-  onSnapshot,
-  query,
-  getDocs,
-  doc,
-  getDoc,
-  updateDoc,
-  orderBy,
-  Timestamp,
-  runTransaction,
-  where,
-  addDoc,
-  getFirestore,
-} from "firebase/firestore";
-
-import { db } from "@/src/lib/firebase/clientApp";
-
-export async function updateRestaurantImageReference(
-  restaurantId,
-  publicImageUrl
-) {
-  const restaurantRef = doc(collection(db, "restaurants"), restaurantId);
-  if (restaurantRef) {
-    await updateDoc(restaurantRef, { photo: publicImageUrl });
-  }
-}
-
-const updateWithRating = async (
-  transaction,
-  docRef,
-  newRatingDocument,
-  review
-) => {
-  return;
-};
-
-export async function addReviewToRestaurant(db, restaurantId, review) {
-  return;
-}
-
+// Filters a Firestore query with optional filters for category, city, price, and sort
 function applyQueryFilters(q, { category, city, price, sort }) {
-  return;
+  // Filter by category if specified
+  if (category) {
+    q = query(q, where("category", "==", category));
+  }
+
+  // Filter by city if specified
+  if (city) {
+    q = query(q, where("city", "==", city));
+  }
+
+  // Filter by price if specified
+  // Note: price is assumed to be an array (like "$$$"), and its length maps to a number
+  if (price) {
+    q = query(q, where("price", "==", price.length));
+  }
+
+  // Sort by average rating descending if sort is "Rating" or not specified
+  if (sort === "Rating" || !sort) {
+    q = query(q, orderBy("avgRating", "desc"));
+  }
+  // Otherwise, if sort is "Review", sort by number of ratings descending
+  else if (sort === "Review") {
+    q = query(q, orderBy("numRatings", "desc"));
+  }
+
+  // Return the fully constructed query
+  return q;
 }
 
+// Retrieves a list of restaurants from Firestore, optionally filtered and sorted
 export async function getRestaurants(db = db, filters = {}) {
-  return [];
-}
+  // Start with a base query on the "restaurants" collection
+  let q = query(collection(db, "restaurants"));
 
-export function getRestaurantsSnapshot(cb, filters = {}) {
-  return;
-}
+  // Apply filters such as category, city, price, and sort
+  q = applyQueryFilters(q, filters);
 
-export async function getRestaurantById(db, restaurantId) {
-  if (!restaurantId) {
-    console.log("Error: Invalid ID received: ", restaurantId);
-    return;
-  }
-  const docRef = doc(db, "restaurants", restaurantId);
-  const docSnap = await getDoc(docRef);
-  return {
-    ...docSnap.data(),
-    timestamp: docSnap.data().timestamp.toDate(),
-  };
-}
-
-export function getRestaurantSnapshotById(restaurantId, cb) {
-  return;
-}
-
-export async function getReviewsByRestaurantId(db, restaurantId) {
-  if (!restaurantId) {
-    console.log("Error: Invalid restaurantId received: ", restaurantId);
-    return;
-  }
-
-  const q = query(
-    collection(db, "restaurants", restaurantId, "ratings"),
-    orderBy("timestamp", "desc")
-  );
-
+  // Execute the query and get the snapshot of matching documents
   const results = await getDocs(q);
+
+  // Map over the document snapshots and return plain JS objects with restaurant data
   return results.docs.map((doc) => {
     return {
-      id: doc.id,
-      ...doc.data(),
-      // Only plain objects can be passed to Client Components from Server Components
+      id: doc.id, // Include the document ID
+      ...doc.data(), // Spread the document data
+      // Convert Firestore Timestamp to JS Date so it can be used in client components
       timestamp: doc.data().timestamp.toDate(),
     };
   });
-}
-
-export function getReviewsSnapshotByRestaurantId(restaurantId, cb) {
-  if (!restaurantId) {
-    console.log("Error: Invalid restaurantId received: ", restaurantId);
-    return;
-  }
-
-  const q = query(
-    collection(db, "restaurants", restaurantId, "ratings"),
-    orderBy("timestamp", "desc")
-  );
-  return onSnapshot(q, (querySnapshot) => {
-    const results = querySnapshot.docs.map((doc) => {
-      return {
-        id: doc.id,
-        ...doc.data(),
-        // Only plain objects can be passed to Client Components from Server Components
-        timestamp: doc.data().timestamp.toDate(),
-      };
-    });
-    cb(results);
-  });
-}
-
-export async function addFakeRestaurantsAndReviews() {
-  const data = await generateFakeRestaurantsAndReviews();
-  for (const { restaurantData, ratingsData } of data) {
-    try {
-      const docRef = await addDoc(
-        collection(db, "restaurants"),
-        restaurantData
-      );
-
-      for (const ratingData of ratingsData) {
-        await addDoc(
-          collection(db, "restaurants", docRef.id, "ratings"),
-          ratingData
-        );
-      }
-    } catch (e) {
-      console.log("There was an error adding the document");
-      console.error("Error adding document: ", e);
-    }
-  }
 }
